@@ -4,6 +4,36 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 
+def  selct_2_oper_data(data_path, target, KC_list):
+    df = pd.read_csv(data_path)
+    df = df.sort_values('Unnamed: 0')
+    df = df.reset_index(drop=True)
+    # selector net에서 오는 데이터 example
+    target = target
+        #"Calculate.total.in.proportion.with.fractions"
+    KC_list = KC_list
+        #["Enter.given.part.in.proportion", "Enter.Calculated.value.of.rate", 
+        #    'Enter.denominator.of.form.of.1', 'Enter.proportion.label.in.numerator']
+    temp_list = KC_list
+    temp_list.append(target)
+    df = pd.concat([df['Unnamed: 0'],df[temp_list]],axis=1)
+    re_cols = list(df.columns)
+    re_cols.remove(target)
+    re_cols.append(target)
+    df = df[re_cols]
+    stus = list(df['Unnamed: 0'].unique())
+    index = []
+    skill = []
+    acc = []
+    for i in range(len(stus)):
+        for j in range(len(re_cols[1:])):
+            index.append(stus[i])
+            skill.append(re_cols[j+1])
+            acc.append(df.loc[i][j+1])
+    result = pd.DataFrame({ 'student':index, 'KC':skill, 'acc':acc })
+    return result
+
+
 
 def pre_loader(data_path, target_KC):
     data_pd = pd.read_csv(data_path)

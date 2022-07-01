@@ -10,7 +10,7 @@ from sklearn.metrics import roc_curve
 import numpy as np
 import pandas as pd
 
-from data_loader import pre_loader, pp_loader
+from data_loader import pre_loader, pp_loader, selct_2_oper_data
 from model import DKT
 from train import train
 
