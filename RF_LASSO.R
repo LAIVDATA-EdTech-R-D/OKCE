@@ -147,42 +147,52 @@ clean_birel <- function(dat){
 #-------------------------------------------------------------------------------------------------------------#
 
 make_final_set <- function(rf_lasso_dat, rf_imp_dat, col_names){
-  rf_lasso_dat=rf_lasso
-  rf_imp_dat = rf_imp
+#  rf_lasso_dat=rf_lasso
+#  rf_imp_dat = rf_imp
   final_set = merge(x=rf_lasso_dat, y=rf_imp_dat, by=c("before","after"),all.x=TRUE)
-  final_set$ord= ifelse(final_set$method=='BOTH', 1 ,ifelse(final_set$method=='LASSO',2,ifelse(final_set$method=='RF', 3,4)))
-  final_set[is.na(final_set$ord),c("ord")]=4
-  final_set[is.na(final_set$method),c("method")]="_"
+  final_set$ord= ifelse(final_set$method=='BOTH', 1 ,ifelse(final_set$method=='LASSO',2,3))
   colnames(final_set)=c("before","after","impx","method","imp","ord")
-  fset = sqldf("select before, after, ord, method, imp from final_set order by before, ord, imp desc")
-  
   fset= sqldf("SELECT * FROM (SELECT before, after, ord, method,imp, ROW_NUMBER() 
                               OVER(PARTITION BY before ORDER BY before, ord, imp DESC) as rn
           FROM final_set) WHERE rn <= 12")
 
-  # select "before"s when addition is needed.
+ #make candidate rows to add to final set
+  
+  #1. select "before"s when addition is needed.
   
   temp1 = sqldf("select before, max(rn) as max_rn from fset group by before")
   temp2 = temp1[temp1$max_rn < 12,]
   temp2$add_rn = 12-temp2$max_rn
   
-  # make possible pair only for "before"s which are requesting addition of rows.
+  #2. make possible pair for lacking "before"s .
   
-  temp3 = data.frame(col= (colnames(analysis_data1)))
-  temp4 = sqldf("select before, col as after, add_rn from temp2, temp3") 
+    temp3 = data.frame(col= (colnames(analysis_data1)))
+    temp4 = sqldf("select before, col as after, add_rn from temp2, temp3") 
   
-  # only select observations of target "before"s
+    # bring all columns for the 2. "before's
   
-  temp5 = merge(fset, temp2, by="before", all.y=TRUE)
-  temp5$exists = 1
+    temp5 = merge(fset, temp2, by="before", all.y=TRUE)
+    temp5$exists = 1
   
-  fset2 = sqldf("select before, 10-max_rn as cnt from fset1 where max_rn <10")
+    # check the obs is if appeared or not among all obs
+    temp6 = merge(temp5, temp4, by=c("before","after"), all.y=TRUE)[,c("before","after","exists","add_rn.y")]
+    colnames(temp6)[4]="add_rn"
 
-  fset_add1 = merge(x=fset, y=fset2, by="before", all.y=TRUE)
-  fset_add2 = cbind(sqldf("select before, after from fset_add1 where rn <= cnt  "),NA,NA,NA,NA)  
-  colnames(fset_add2)=colnames(fset)
-  fset3 = rbind(fset, fset_add2)
-  return(fset)
+    # candidates for random sampling
+    candidates = temp6[is.na(temp6$exists),]                                                                     
+
+  # if random order is smaller or equal to requested rows, collect the obs
+
+  temp7 = sqldf("select *, random() as rand from candidates")
+  
+  temp8 = sqldf("select * from (select before, after, add_rn, ROW_NUMBER() OVER(PARTITION BY before  ORDER BY rand) as rank from temp7) where rank <= add_rn ")
+  
+  # bind final set with random samples 
+  fset_add = cbind(temp8$before, temp8$after, NA,NA,NA,NA)
+  colnames(fset_add)= colnames(fset)
+  fset1=rbind(fset,fset_add)
+
+  return(fset1)
 }
 
 #-------------------------------------------------------------------------------------------------------------#
@@ -197,42 +207,43 @@ random_select <- function(dat){
   }  
 }  
 
+
 init()
 
 
-    tic("make series table and markov table with 2 test results w/o backing information")    
+tic("make series table and markov table with 2 test results w/o backing information")    
 #    analysis_data <- read.csv(input_file_name) # input file should be a matrix
-    analysis_data <- read.csv("/home/laivdata/바탕화면/FIR/MERGE/data/algebra_percent3000.csv")[,-1] # input file should be a matrix
-    analysis_data1 <- analysis_data[rowSums(analysis_data[])<ncol(analysis_data[]) & rowSums(analysis_data[]) > 0 ,]    
-    summary(analysis_data1)
-    toc()
-  
+analysis_data <- read.csv("/home/laivdata/바탕화면/FIR/MERGE/data/algebra_picture3000.csv")[,-1] # input file should be a matrix
+analysis_data1 <- analysis_data[rowSums(analysis_data[])<ncol(analysis_data[]) & rowSums(analysis_data[]) > 0 ,]    
+summary(analysis_data1)[4,] #mean for all columns
+toc()
+
 #----------------------------------Elastic LASSO + random forest ---------------------------------------  
-    tic("Discover relationships b/w KCs based on elastic net results (CV=1000, lasso)")
-    rel_elasso <- elastic_anal(analysis_data1)
-    toc()
-  
-    tic("run random forest algorithm")
-    rf_imp <- run_rf(analysis_data1)
-    rf_df <- clean_birel(rf_imp)    
-  
-    if(rf_cut < 0.3){
-      rf_df1 <- sqldf(paste0("select * from rf_df order by imp desc limit ",as.integer(nrow(rf_imp)*rf_cut)))
-    } else {
-      rf_df1 <- sqldf(paste0("select * from rf_df order by imp desc limit ",as.integer(nrow(rel_elasso))))  
-    }  
-    toc()
+tic("Discover relationships b/w KCs based on elastic net results (CV=1000, lasso)")
+rel_elasso <- elastic_anal(analysis_data1)
+toc()
+
+tic("run random forest algorithm")
+rf_imp <- run_rf(analysis_data1)
+rf_df <- clean_birel(rf_imp)    
+
+if(rf_cut < 0.3){
+  rf_df1 <- sqldf(paste0("select * from rf_df order by imp desc limit ",as.integer(nrow(rf_imp)*rf_cut)))
+} else {
+  rf_df1 <- sqldf(paste0("select * from rf_df order by imp desc limit ",as.integer(nrow(rel_elasso))))  
+}  
+toc()
 #----------------------------------Merge RF & LASSO ---------------------------------------  
-    
-    tic("merge LASSO and RF")
-    rf_lasso <- check_from_merge(rel_elasso, rf_df1)
-    toc()
+
+tic("merge LASSO and RF")
+rf_lasso <- check_from_merge(rel_elasso, rf_df1)
+toc()
 
 #----------------------------------Make final set  with 15 lines---------------------------------------          
-    relation_f <- make_final_set(rf_lasso,rf_imp, colnames(analysis_data1))
-    sqldf("select before, max(rn) from relation_f group by  before")
+relation_f <- make_final_set(rf_lasso,rf_imp, colnames(analysis_data1))
+sqldf("select before, max(rn) from relation_f group by  before")
 
-    
+
 #----------------------------------random select with 10 iterations---------------------------------------              
-    random_select(relation_f)
-    
+random_select(relation_f)
+
