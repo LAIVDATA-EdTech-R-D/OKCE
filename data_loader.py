@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
+import json
 
 def  selct_2_oper_data(data_path, target, KC_list):
     df = pd.read_csv(data_path)
@@ -37,10 +38,10 @@ def  selct_2_oper_data(data_path, target, KC_list):
 
 def pre_loader(data_path, target_KC):
     data_pd = pd.read_csv(data_path)
-    print("Unique KC ", data_pd['kc_uid'].unique())
+    #print("Unique KC ", data_pd['KC'].unique())
     
-    new_df = pd.DataFrame(index=range(0), columns = ['knowre_user_id', 'kc_uid', 'accuracy'])
-    students = data_pd['knowre_user_id'].unique()
+    new_df = pd.DataFrame(index=range(0), columns = ['knowre_user_id', 'kc_uid', 'acc'])
+    students = list(data_pd['knowre_user_id'].unique())
     for i in range(len(students)):
         cond = data_pd.knowre_user_id == students[i]
         temp1 = data_pd[cond]
@@ -50,11 +51,57 @@ def pre_loader(data_path, target_KC):
         result = pd.concat([temp1,tail])
         new_df = pd.concat([new_df,result])
     new_df = new_df.reset_index(drop=True)
+    print(new_df)
 
     idx_students, students, students_id_to_idx, one_hot_vectors, n_items = loader(new_df)
     batches, n_items = batch_loader(idx_students, students, students_id_to_idx, one_hot_vectors, n_items)
 
     return batches, n_items
+
+
+def kdd_loader(data_path, subset_list, target_KC):
+
+    # subset_list 학습 순서 매기기(KC 순서대로)
+    ordering_json_path = './KC_Ordering.json'
+    # 기존 json 파일 읽어오기
+    with open(ordering_json_path, 'r') as file:
+        OrderingData = json.load(file)
+
+    A = subset_list
+    B = OrderingData[data_path]
+    subset_list = [i for _,i in sorted(zip(B,A))]
+
+    data_pd = pd.read_csv(data_path)
+    subset_list.insert(0, "student")
+    subset_list.append(target_KC)
+    data_pd = data_pd[subset_list]
+    cols = list(data_pd.columns)[1:]
+    cols.remove(target_KC)
+    cols.append(target_KC)
+    students = list(data_pd['student'].unique())
+    new_df = pd.DataFrame(index=range(0), columns = ['student', 'kc', 'acc'])
+    try:
+        for i in range(len(students)):
+            for j in range(len(cols)):
+                sample_df = pd.DataFrame({
+                    'student' : students[i],
+                    'kc' : cols[j],
+                    'acc' : data_pd[cols[j]][i]},
+                index = [0])
+                new_df = pd.concat([new_df,sample_df])
+    except:
+        print('i, j: ', i, j)
+        print("students[i] : ", students[i])
+        print("cols[i] : ", cols[i])
+        print("data_pd[cols[j]] : ", data_pd[cols[j]])
+        print("data_pd[cols[j]][i] : ", data_pd[cols[j]][i])
+        exit()
+
+    new_df = new_df.reset_index(drop= True)
+    idx_students, students, students_id_to_idx, one_hot_vectors, n_items = loader(new_df)
+    batches, n_items = batch_loader(idx_students, students, students_id_to_idx, one_hot_vectors, n_items)
+    #print(new_df)
+    return batches, n_items 
 
 
 def loader(new_df):
