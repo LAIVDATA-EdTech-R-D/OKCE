@@ -150,27 +150,26 @@ def GetRankedKCGraph(json_path, data_path,n_epochs):
                 kc_candidates = random.sample(cand, 5)
                 #print("step 3 / ",  kc_candidates)
         # 상위 40% auc에 가장 많이 등장했던 KC 하나와 best rels의 kc들을 하나씩 교체하면서 실험 후 최종적으로 best 선정
-        const = result_df.auc.quantile(q=0.6)#.value_counts('rel1','rel2','rel3','rel4','rel5').idmax()
+        now_result_df = result_df[result_df['target']==all_kcs[kc_idx]]
+        const = now_result_df.auc.quantile(q=0.6)#.value_counts('rel1','rel2','rel3','rel4','rel5').idmax()
 
-        temp = result_df[(result_df['target']==all_kcs[kc_idx]) & (result_df['auc'] > const)].filter(regex='rel', axis=1)
+        temp = now_result_df[(now_result_df['auc'] > const)].filter(regex='rel', axis=1)
         cand_kcs = []
         cand_kcs.extend(temp.values.tolist())
         cand_kcs = sum(cand_kcs, [])
 
         remove_set = set(best_kcs)
 
-        cand_kcs = [i for i in cand_kcs if i not in remove_set]
+        cand_kcs = [i for i in cand_kcs if i not in remove_set]    
 
         most_kc = collections.Counter(cand_kcs).most_common(1)[0][0]
 
-        for k in range(len(best_kcs)):
+        for k in range(5):
             kc_candidates = best_kcs.copy()
             kc_candidates[k] = most_kc
 
             ranked_kc_rel, cur_err = DoOperatorNet(data_path, n_epochs, kc_candidates, all_kcs[kc_idx])
 
-            #print("Rank of KCs: ", ranked_kc_rel)
-            #print("Error: ", cur_err)
             result_list = []
             result_list.append(all_kcs[kc_idx])
             result_list.extend(ranked_kc_rel)
