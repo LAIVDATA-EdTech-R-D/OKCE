@@ -9,6 +9,7 @@ import time
 import random
 import collections
 from tqdm import tqdm
+import copy
 
 startt = time.strftime('%c', time.localtime(time.time()))
 
@@ -103,81 +104,84 @@ def GetRankedKCGraph(json_path, data_path,n_epochs):
     result_df = pd.DataFrame(index=range(0), columns=['target','rel1','rel2','rel3','rel4','rel5','auc'])
     
     
-    #for kc_idx in range(num_total_kc):
-    for kc_idx in range(2):
-        kc_candidates = random.sample(sub_kcs[all_kcs[kc_idx]], 5)
-        best_auc = 0
-        for i in range(10): 
+    try: 
+        for kc_idx in range(num_total_kc):
+        #for kc_idx in range(15,20):
+            kc_candidates = random.sample(sub_kcs[all_kcs[kc_idx]], 5)
+            best_auc = 0
+            for i in range(10): 
 
-            # operator net(train)
-            ranked_kc_rel, cur_err = DoOperatorNet(data_path, n_epochs, kc_candidates, all_kcs[kc_idx])
+                # operator net(train)
+                ranked_kc_rel, cur_err = DoOperatorNet(data_path, n_epochs, kc_candidates, all_kcs[kc_idx])
 
-            #print("Rank of KCs: ", ranked_kc_rel)
-            #print("Error: ", cur_err)
-            result_list = []
-            result_list.append(all_kcs[kc_idx])
-            result_list.extend(ranked_kc_rel)
-            result_list.append(cur_err)
-            result_df = result_df.append(pd.Series(result_list, index=result_df.columns), ignore_index=True)
-            
-            # 결과에 대한 판단 시작
-            # 1. best보다 좋을 때 : 겹치는 것 남김
-            if cur_err > best_auc:
-                if i == 0:
-                    best_auc = cur_err
-                    best_kcs = ranked_kc_rel
-                    kc_candidates = random.sample(sub_kcs[all_kcs[kc_idx]], 5)
-                    #print("step 1-1 / ",  kc_candidates)
-                else:
-                    add_kc = list(set(ranked_kc_rel).intersection(set(result_df.filter(regex='rel', axis=1).iloc[-2])))
+                #print("Rank of KCs: ", ranked_kc_rel)
+                #print("Error: ", cur_err)
+                result_list = []
+                result_list.append(all_kcs[kc_idx])
+                result_list.extend(ranked_kc_rel)
+                result_list.append(cur_err)
+                result_df = result_df.append(pd.Series(result_list, index=result_df.columns), ignore_index=True)
+                
+                # 결과에 대한 판단 시작
+                # 1. best보다 좋을 때 : 겹치는 것 남김
+                if cur_err > best_auc:
+                    if i == 0:
+                        best_auc = cur_err
+                        best_kcs = ranked_kc_rel
+                        kc_candidates = random.sample(sub_kcs[all_kcs[kc_idx]], 5)
+                        #print("step 1-1 / ",  kc_candidates)
+                    else:
+                        add_kc = list(set(ranked_kc_rel).intersection(set(result_df.filter(regex='rel', axis=1).iloc[-2])))
+                        kc_candidates = []
+                        kc_candidates.extend(add_kc)
+                        cand = list(set(sub_kcs[all_kcs[kc_idx]]) - set(add_kc))
+                        kc_candidates.extend(random.sample(cand, 5-len(add_kc)))
+                        #print("step 1-2 / ",  kc_candidates)
+                # 2. 직전 결과보다 현제 결과가 좋을 때 (best보다는 낮음) : 새로 들어온 것 남김
+                elif cur_err > result_df['auc'].iloc[-2]:
                     kc_candidates = []
+                    add_kc = list(set(ranked_kc_rel) - set(result_df.filter(regex='rel', axis=1).iloc[-2]))
                     kc_candidates.extend(add_kc)
                     cand = list(set(sub_kcs[all_kcs[kc_idx]]) - set(add_kc))
                     kc_candidates.extend(random.sample(cand, 5-len(add_kc)))
-                    #print("step 1-2 / ",  kc_candidates)
-            # 2. 직전 결과보다 현제 결과가 좋을 때 (best보다는 낮음) : 새로 들어온 것 남김
-            elif cur_err > result_df['auc'].iloc[-2]:
-                kc_candidates = []
-                add_kc = list(set(ranked_kc_rel) - set(result_df.filter(regex='rel', axis=1).iloc[-2]))
-                kc_candidates.extend(add_kc)
-                cand = list(set(sub_kcs[all_kcs[kc_idx]]) - set(add_kc))
-                kc_candidates.extend(random.sample(cand, 5-len(add_kc)))
-                #print("step 2 / ",  kc_candidates)
-            # 3. 직전 결과보다 현재 결과가 나쁠 때 : 새로 들어온 것 후보에서 제외
-            else:
-                sub_kc = set(ranked_kc_rel) - set(result_df.filter(regex='rel', axis=1).iloc[-2])
-                cand = list(set(sub_kcs[all_kcs[kc_idx]]) - sub_kc)
-                kc_candidates = random.sample(cand, 5)
-                #print("step 3 / ",  kc_candidates)
-        # 상위 40% auc에 가장 많이 등장했던 KC 하나와 best rels의 kc들을 하나씩 교체하면서 실험 후 최종적으로 best 선정
-        now_result_df = result_df[result_df['target']==all_kcs[kc_idx]]
-        const = now_result_df.auc.quantile(q=0.6)#.value_counts('rel1','rel2','rel3','rel4','rel5').idmax()
+                    #print("step 2 / ",  kc_candidates)
+                # 3. 직전 결과보다 현재 결과가 나쁠 때 : 새로 들어온 것 후보에서 제외
+                else:
+                    sub_kc = set(ranked_kc_rel) - set(result_df.filter(regex='rel', axis=1).iloc[-2])
+                    cand = list(set(sub_kcs[all_kcs[kc_idx]]) - sub_kc)
+                    kc_candidates = random.sample(cand, 5)
+                    #print("step 3 / ",  kc_candidates)
+            # 상위 40% auc에 가장 많이 등장했던 KC 하나와 best rels의 kc들을 하나씩 교체하면서 실험 후 최종적으로 best 선정
+            now_result_df = result_df[result_df['target']==all_kcs[kc_idx]]
+            const = now_result_df.auc.quantile(q=0.6)#.value_counts('rel1','rel2','rel3','rel4','rel5').idmax()
 
-        temp = now_result_df[(now_result_df['auc'] > const)].filter(regex='rel', axis=1)
-        cand_kcs = []
-        cand_kcs.extend(temp.values.tolist())
-        cand_kcs = sum(cand_kcs, [])
+            temp = now_result_df[(now_result_df['auc'] > const)].filter(regex='rel', axis=1)
+            cand_kcs = []
+            cand_kcs.extend(temp.values.tolist())
+            cand_kcs = sum(cand_kcs, [])
 
-        remove_set = set(best_kcs)
+            remove_set = set(best_kcs)
 
-        cand_kcs = [i for i in cand_kcs if i not in remove_set]    
+            cand_kcs = [i for i in cand_kcs if i not in remove_set]    
 
-        most_kc = collections.Counter(cand_kcs).most_common(1)[0][0]
+            most_kc = collections.Counter(cand_kcs).most_common(1)[0][0]
 
-        for k in range(5):
-            kc_candidates = best_kcs.copy()
-            kc_candidates[k] = most_kc
+            for k in range(5):
+                kc_candidates = copy.deepcopy(best_kcs)
+                kc_candidates[k] = most_kc
 
-            ranked_kc_rel, cur_err = DoOperatorNet(data_path, n_epochs, kc_candidates, all_kcs[kc_idx])
+                ranked_kc_rel, cur_err = DoOperatorNet(data_path, n_epochs, kc_candidates, all_kcs[kc_idx])
 
-            result_list = []
-            result_list.append(all_kcs[kc_idx])
-            result_list.extend(ranked_kc_rel)
-            result_list.append(cur_err)
-            result_df = result_df.append(pd.Series(result_list, index=result_df.columns), ignore_index=True)   
-
-    
-    result_df.to_csv('./OUT/FIR_Result_cond_test.csv', index=False)
+                result_list = []
+                result_list.append(all_kcs[kc_idx])
+                result_list.extend(ranked_kc_rel)
+                result_list.append(cur_err)
+                result_df = result_df.append(pd.Series(result_list, index=result_df.columns), ignore_index=True)   
+        result_df.to_csv('./OUT/FIR_Result_algo_end5.csv', index=False)
+    except:
+        print("문제 : ", all_kcs[kc_idx])
+        print("kc_idx : ", kc_idx)
+        result_df.to_csv('./OUT/FIR_Result_algo_test0817_error.csv', index=False)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_path', type=str, required=True, help='input data file')
@@ -185,7 +189,7 @@ parser.add_argument('--n_epochs', type=int, default=150, help='# of train epochs
 args = parser.parse_args()
 json_path = './info_back.json'
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 GetRankedKCGraph(json_path, args.data_path, args.n_epochs)
 
 endt = time.strftime('%c', time.localtime(time.time()))
