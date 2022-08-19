@@ -92,6 +92,38 @@ def DoOperatorNet(data_path, n_epochs, kc_candidates, target_KC):
 
     return ranked_kc_rel, cur_err
 
+def SelectKCSet(KC_picking_tb, KC_candidates):
+    pick_n = 5 - len(KC_candidates)
+    m = pick_n - 1
+    
+    KC_picking_tb = dict(sorted(KC_picking_tb.items(), key=lambda x:x[1], reverse=False))
+#    print("low : ", KC_picking_tb)
+    low_set = []
+    for key, value in KC_picking_tb.items():
+        if key not in KC_candidates:
+            low_set.append(key)
+        if len(low_set) >= 3:
+            break
+    pick1 = random.sample(low_set, 1)
+    KC_candidates.append(pick1)
+    
+    KC_picking_tb = dict(sorted(KC_picking_tb.items(), key=lambda x:x[1], reverse=True))
+#    print("high : ", KC_picking_tb)
+    high_set = []
+    for key, value in KC_picking_tb.items():
+        if key not in KC_candidates:
+            high_set.append(key)
+        if len(high_set) >= 4:
+            break
+    pick2 = random.sample(high_set, m)
+    KC_candidates.append(pick2)
+    
+    # picking table update
+    picks = pick1+pick2
+    for i in range(len(picks)):
+        KC_picking_tb[picks[i]] += 1 
+
+    return KC_candidates, KC_picking_tb
 
 def GetRankedKCGraph(json_path, data_path,n_epochs):
     arr_ranked_kc_graph = np.zeros((num_total_kc, num_total_kc))
@@ -107,81 +139,91 @@ def GetRankedKCGraph(json_path, data_path,n_epochs):
     try: 
         for kc_idx in range(num_total_kc):
         #for kc_idx in range(15,20):
-            kc_candidates = random.sample(sub_kcs[all_kcs[kc_idx]], 5)
-            best_auc = 0
-            for i in range(10): 
+            KC_picking_tb = dict(zip(sub_kcs[all_kcs[kc_idx]], [0]*12))
 
+            cnt_best_kcs = 0
+            best_auc = 0
+            cur_err = 0
+            best_kcs = []
+            kc_candidates = random.sample(sub_kcs[all_kcs[kc_idx]], 5)
+            
+            ranked_kc_rel, cur_err = DoOperatorNet(data_path, n_epochs, kc_candidates, all_kcs[kc_idx])
+            result_list = []
+            result_list.append(all_kcs[kc_idx])
+            result_list.extend(ranked_kc_rel)
+            result_list.append(cur_err)
+            result_df = result_df.append(pd.Series(result_list, index=result_df.columns), ignore_index=True)
+            before_kcs = copy.deepcopy(ranked_kc_rel)
+
+            for i in range(10): 
+                
                 # operator net(train)
                 ranked_kc_rel, cur_err = DoOperatorNet(data_path, n_epochs, kc_candidates, all_kcs[kc_idx])
 
-                #print("Rank of KCs: ", ranked_kc_rel)
-                #print("Error: ", cur_err)
                 result_list = []
                 result_list.append(all_kcs[kc_idx])
                 result_list.extend(ranked_kc_rel)
                 result_list.append(cur_err)
                 result_df = result_df.append(pd.Series(result_list, index=result_df.columns), ignore_index=True)
                 
+        #        if i == 0:
+        #            before_kcs = []
+        #        else:
+        #            before_kcs = list(result_df.filter(regex='rel', axis=1).iloc[-2])
+                
                 # 결과에 대한 판단 시작
-                # 1. best보다 좋을 때 : 겹치는 것 남김
-                if cur_err > best_auc:
-                    if i == 0:
-                        best_auc = cur_err
-                        best_kcs = ranked_kc_rel
-                        kc_candidates = random.sample(sub_kcs[all_kcs[kc_idx]], 5)
-                        #print("step 1-1 / ",  kc_candidates)
-                    else:
-                        add_kc = list(set(ranked_kc_rel).intersection(set(result_df.filter(regex='rel', axis=1).iloc[-2])))
-                        kc_candidates = []
-                        kc_candidates.extend(add_kc)
-                        cand = list(set(sub_kcs[all_kcs[kc_idx]]) - set(add_kc))
-                        kc_candidates.extend(random.sample(cand, 5-len(add_kc)))
-                        #print("step 1-2 / ",  kc_candidates)
-                # 2. 직전 결과보다 현제 결과가 좋을 때 (best보다는 낮음) : 새로 들어온 것 남김
-                elif cur_err > result_df['auc'].iloc[-2]:
-                    kc_candidates = []
-                    add_kc = list(set(ranked_kc_rel) - set(result_df.filter(regex='rel', axis=1).iloc[-2]))
-                    kc_candidates.extend(add_kc)
-                    cand = list(set(sub_kcs[all_kcs[kc_idx]]) - set(add_kc))
-                    kc_candidates.extend(random.sample(cand, 5-len(add_kc)))
-                    #print("step 2 / ",  kc_candidates)
-                # 3. 직전 결과보다 현재 결과가 나쁠 때 : 새로 들어온 것 후보에서 제외
+                # best set이 똑같은 게 3번 나오면 for문 종료
+                if cnt_best_kcs >= 3:
+                    break
+        
+                # 현재와 best set이 같을 때
+                if set(ranked_kc_rel) == set(best_kcs):
+                    print("같은 셋이 나왔음")
+                    cnt_best_kcs += 1
+                    before_kcs = copy.deepcopy(best_kcs)
+                    new_kcs = []
+                # 현재 AUC가 직전 AUC보다 높다면
+                elif cur_err >= result_df['auc'].iloc[-2]:
+                    print("다른 셋이면서 현재 AUC 직전 것보다 높음")
+                    # 현재 AUC가 best보다 높다면
+                    if cur_err > best_auc:
+                        print("다른 셋이면서 현재 AUC best보다 높음")
+                        cnt_best_kcs = 1
+                        before_kcs = copy.deepcopy(best_kcs)
+                        best_kcs = copy.deepcopy(ranked_kc_rel)
+                        new_kcs = list(set(ranked_kc_rel) - set(before_kcs))
+                # 현재 AUC가 직전 AUC보다 낮다면
                 else:
-                    sub_kc = set(ranked_kc_rel) - set(result_df.filter(regex='rel', axis=1).iloc[-2])
-                    cand = list(set(sub_kcs[all_kcs[kc_idx]]) - sub_kc)
-                    kc_candidates = random.sample(cand, 5)
-                    #print("step 3 / ",  kc_candidates)
-            # 상위 40% auc에 가장 많이 등장했던 KC 하나와 best rels의 kc들을 하나씩 교체하면서 실험 후 최종적으로 best 선정
-            now_result_df = result_df[result_df['target']==all_kcs[kc_idx]]
-            const = now_result_df.auc.quantile(q=0.6)#.value_counts('rel1','rel2','rel3','rel4','rel5').idmax()
+                    print("현재 AUC 직전보다 낮음")
+                    new_kcs = []
 
-            temp = now_result_df[(now_result_df['auc'] > const)].filter(regex='rel', axis=1)
-            cand_kcs = []
-            cand_kcs.extend(temp.values.tolist())
-            cand_kcs = sum(cand_kcs, [])
+                KC_candidates = []
+                KC_candidates.extend(new_kcs)
 
-            remove_set = set(best_kcs)
+                # picking table update
+                for i in range(len(new_kcs)):
+                    KC_picking_tb[new_kcs[i]] += 1
 
-            cand_kcs = [i for i in cand_kcs if i not in remove_set]    
+                org_kcs = list(set.difference(set(ranked_kc_rel) - set(new_kcs)))
+                # picking table update
+                for i in range(len(org_kcs)):
+                    KC_picking_tb[org_kcs[i]] -= 1
 
-            most_kc = collections.Counter(cand_kcs).most_common(1)[0][0]
+                if len(KC_candidates) < 5:
+                    KC_candidates, KC_picking_tb = SelectKCSet(KC_picking_tb, KC_candidates)
+                
+                before_kcs = copy.deepcopy(ranked_kc_rel)
+                    
 
-            for k in range(5):
-                kc_candidates = copy.deepcopy(best_kcs)
-                kc_candidates[k] = most_kc
-
-                ranked_kc_rel, cur_err = DoOperatorNet(data_path, n_epochs, kc_candidates, all_kcs[kc_idx])
-
-                result_list = []
-                result_list.append(all_kcs[kc_idx])
-                result_list.extend(ranked_kc_rel)
-                result_list.append(cur_err)
-                result_df = result_df.append(pd.Series(result_list, index=result_df.columns), ignore_index=True)   
-        result_df.to_csv('./OUT/FIR_Result_algo_end5.csv', index=False)
+            with open('./OUT/0819KC_picking_tb.txt','w',encoding='UTF-8') as f:
+                for code,name in KC_picking_tb.items():
+                    f.write(f'{code} : {name}\n')
+            
+        result_df.to_csv('./OUT/FIR_Result_algo_iter20.csv', index=False)
     except:
         print("문제 : ", all_kcs[kc_idx])
         print("kc_idx : ", kc_idx)
-        result_df.to_csv('./OUT/FIR_Result_algo_test0817_error.csv', index=False)
+        result_df.to_csv('./OUT/FIR_Result_algo_test_error.csv', index=False)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_path', type=str, required=True, help='input data file')
