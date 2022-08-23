@@ -105,7 +105,7 @@ def SelectKCSet(KC_picking_tb, KC_candidates):
         if len(low_set) >= 3:
             break
     pick1 = random.sample(low_set, 1)
-    KC_candidates.append(pick1)
+    KC_candidates.extend(pick1)
     
     KC_picking_tb = dict(sorted(KC_picking_tb.items(), key=lambda x:x[1], reverse=True))
 #    print("high : ", KC_picking_tb)
@@ -116,12 +116,15 @@ def SelectKCSet(KC_picking_tb, KC_candidates):
         if len(high_set) >= 4:
             break
     pick2 = random.sample(high_set, m)
-    KC_candidates.append(pick2)
+    KC_candidates.extend(pick2)
     
     # picking table update
     picks = pick1+pick2
+    print("pick1 : ", pick1)
+    print("pick2 : ", pick2)
     for i in range(len(picks)):
         KC_picking_tb[picks[i]] += 1 
+    print("4 KC_picking_tb +++++ : ", KC_picking_tb)
 
     return KC_candidates, KC_picking_tb
 
@@ -140,40 +143,61 @@ def GetRankedKCGraph(json_path, data_path,n_epochs):
         for kc_idx in range(num_total_kc):
         #for kc_idx in range(15,20):
             KC_picking_tb = dict(zip(sub_kcs[all_kcs[kc_idx]], [0]*12))
+            print("KC_picking_tb : ", KC_picking_tb)
 
             cnt_best_kcs = 0
             best_auc = 0
             cur_err = 0
             best_kcs = []
             kc_candidates = random.sample(sub_kcs[all_kcs[kc_idx]], 5)
+            new_kcs = []
             
+            # operator net(train)
             ranked_kc_rel, cur_err = DoOperatorNet(data_path, n_epochs, kc_candidates, all_kcs[kc_idx])
+
             result_list = []
             result_list.append(all_kcs[kc_idx])
             result_list.extend(ranked_kc_rel)
             result_list.append(cur_err)
             result_df = result_df.append(pd.Series(result_list, index=result_df.columns), ignore_index=True)
+            
             before_kcs = copy.deepcopy(ranked_kc_rel)
+            best_kcs = copy.deepcopy(ranked_kc_rel)
+            best_auc = copy.deepcopy(cur_err)
 
-            for i in range(10): 
+            print("처음 : ", ranked_kc_rel)
+
+            kc_candidates = random.sample(sub_kcs[all_kcs[kc_idx]], 5)
+            print("다음 턴에 들어갈 KC KC: ", kc_candidates)
+            
+            # picking table update
+            for i in range(len(kc_candidates)):
+                KC_picking_tb[kc_candidates[i]] += 1
+            print("1 KC_picking_tb +++++ : ", KC_picking_tb)
+
+            for i in range(5): 
+                print("$"*20,"iter : ", i)
                 
                 # operator net(train)
+                print("11ranked_kc_rel :", kc_candidates)
                 ranked_kc_rel, cur_err = DoOperatorNet(data_path, n_epochs, kc_candidates, all_kcs[kc_idx])
+                print("22ranked_kc_rel :", ranked_kc_rel)
 
                 result_list = []
                 result_list.append(all_kcs[kc_idx])
                 result_list.extend(ranked_kc_rel)
                 result_list.append(cur_err)
                 result_df = result_df.append(pd.Series(result_list, index=result_df.columns), ignore_index=True)
-                
-        #        if i == 0:
-        #            before_kcs = []
-        #        else:
-        #            before_kcs = list(result_df.filter(regex='rel', axis=1).iloc[-2])
+
+                before_auc = result_df['auc'].iloc[-2]
+
                 
                 # 결과에 대한 판단 시작
                 # best set이 똑같은 게 3번 나오면 for문 종료
                 if cnt_best_kcs >= 3:
+                    print("Early Stopping")
+                    print("Best KC Set: ", best_kcs)
+                    print("Best AUC: ", best_auc)
                     break
         
                 # 현재와 best set이 같을 때
@@ -183,7 +207,7 @@ def GetRankedKCGraph(json_path, data_path,n_epochs):
                     before_kcs = copy.deepcopy(best_kcs)
                     new_kcs = []
                 # 현재 AUC가 직전 AUC보다 높다면
-                elif cur_err >= result_df['auc'].iloc[-2]:
+                elif cur_err >= before_auc:
                     print("다른 셋이면서 현재 AUC 직전 것보다 높음")
                     # 현재 AUC가 best보다 높다면
                     if cur_err > best_auc:
@@ -191,39 +215,54 @@ def GetRankedKCGraph(json_path, data_path,n_epochs):
                         cnt_best_kcs = 1
                         before_kcs = copy.deepcopy(best_kcs)
                         best_kcs = copy.deepcopy(ranked_kc_rel)
+                        best_auc = cur_err
+                        new_kcs = list(set(ranked_kc_rel) - set(before_kcs))
+                    else: # 다른 셋이면서 직전과 best 사이
+                        print("다른 셋이면서 현재 AUC가 best와 직전 사이")
                         new_kcs = list(set(ranked_kc_rel) - set(before_kcs))
                 # 현재 AUC가 직전 AUC보다 낮다면
                 else:
                     print("현재 AUC 직전보다 낮음")
                     new_kcs = []
-
-                KC_candidates = []
-                KC_candidates.extend(new_kcs)
+                
+                
+                kc_candidates = []
+                kc_candidates.extend(new_kcs)
 
                 # picking table update
                 for i in range(len(new_kcs)):
                     KC_picking_tb[new_kcs[i]] += 1
+                print("2 KC_picking_tb +++++ : ", KC_picking_tb)
 
                 org_kcs = list(set.difference(set(ranked_kc_rel) - set(new_kcs)))
                 # picking table update
                 for i in range(len(org_kcs)):
                     KC_picking_tb[org_kcs[i]] -= 1
+                print("3 KC_picking_tb ----- : ", KC_picking_tb)
 
-                if len(KC_candidates) < 5:
-                    KC_candidates, KC_picking_tb = SelectKCSet(KC_picking_tb, KC_candidates)
+                if len(kc_candidates) < 5:
+                    kc_candidates, KC_picking_tb = SelectKCSet(KC_picking_tb, kc_candidates)
+                
+                print()
+                print("best_kcs :", best_kcs)
+                print("before_kcs :", before_kcs)        
+                print("ranked_kc_rel :", ranked_kc_rel)
+                print("new_kcs :", new_kcs)
+                print()
                 
                 before_kcs = copy.deepcopy(ranked_kc_rel)
-                    
-
-            with open('./OUT/0819KC_picking_tb.txt','w',encoding='UTF-8') as f:
+                print("다음 턴에 들어갈 KC KC: ", kc_candidates)
+                print()
+                
+            with open('./OUT/0822KC_picking_tb.txt','w',encoding='UTF-8') as f:
                 for code,name in KC_picking_tb.items():
                     f.write(f'{code} : {name}\n')
             
-        result_df.to_csv('./OUT/FIR_Result_algo_iter20.csv', index=False)
+        result_df.to_csv('./OUT/selector_update_test0822.csv', index=False)
     except:
         print("문제 : ", all_kcs[kc_idx])
         print("kc_idx : ", kc_idx)
-        result_df.to_csv('./OUT/FIR_Result_algo_test_error.csv', index=False)
+        result_df.to_csv('./OUT/selector_update_test0822_error.csv', index=False)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_path', type=str, required=True, help='input data file')

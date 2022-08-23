@@ -4,10 +4,12 @@ import torch
 from sklearn.metrics import roc_curve
 from sklearn import metrics
 import numpy as np
+from tqdm import tqdm
 
 best_model = None
 
 eps = 1e-8
+
 
 def loss_function(y_hat, y_real, n_items, device):
     delta = y_real[:,:, :n_items] + y_real[:,:, n_items:]
@@ -27,12 +29,12 @@ def loss_function(y_hat, y_real, n_items, device):
     return torch.masked_select(bce, mask).mean()
 
 
-def train(model, n_epochs,train_loader,device,optimizer,valid_loader,n_items,auc_history,f1_score_history):
+def train(model, n_epochs,train_loader,device,optimizer,valid_loader,n_items,acc_history,auc_history,f1_score_history):
     print_interval = 1
     highest_auc = 0
     highest_epoch = 0
     
-    for i in range(n_epochs):
+    for i in tqdm(range(n_epochs)):
         model.train()
 
         # train_loader에서 미니배치 반환
@@ -60,6 +62,7 @@ def train(model, n_epochs,train_loader,device,optimizer,valid_loader,n_items,auc
             for data in valid_loader: 
                 data = data.to(device)
                 y_hat_i = model(data)
+                #y_hat_i = torch.sigmoid(y_hat_i)
                 loss = loss_function(y_hat_i[:-1], data[1:], n_items, device)
 
                 # correc와 mask를 정의
@@ -80,7 +83,20 @@ def train(model, n_epochs,train_loader,device,optimizer,valid_loader,n_items,auc
         # y_true와 y_score를 numpy로 바꿈
         y_true = torch.cat(y_true).detach().cpu().numpy()
         y_score = torch.cat(y_score).detach().cpu().numpy()
+        y_score = y_score.astype(float)
+        
+        #print("y_true ", y_true)
+        #print("y_score ", y_score)
+        #print("np.round(y_score) ", np.round(y_score))
 
+        # acc 구하기
+        if np.isnan(np.sum(y_score)):
+            print("y_score : ", y_score)
+            print("np.round(y_score) : ", np.round(y_score))
+            print("y_true : ", y_true)
+        acc_score = metrics.accuracy_score(y_true, np.round(y_score))
+        acc_history.append(acc_score)
+        
         # roc_auc_socre 구하기
         auc_score = metrics.roc_auc_score(y_true, y_score)
         auc_history.append(auc_score)
@@ -89,13 +105,13 @@ def train(model, n_epochs,train_loader,device,optimizer,valid_loader,n_items,auc
         f1_score = metrics.f1_score(y_true, np.round(y_score))
         f1_score_history.append(f1_score)
         
-        if (i + 1) % print_interval == 0:
-            print('Epoch %d: f1_score=%.4f auc_score=%.4f highest_auc=%.4f' % (
-                i + 1,
-                f1_score,
-                auc_score,
-                highest_auc,
-            ))
+#        if (i + 1) % print_interval == 0:
+#            print('Epoch %d: f1_score=%.4f auc_score=%.4f highest_auc=%.4f' % (
+#                i + 1,
+#                f1_score,
+#                auc_score,
+#                highest_auc,
+#            ))
 
         if auc_score >= highest_auc:
             highest_auc = auc_score
@@ -109,4 +125,4 @@ def train(model, n_epochs,train_loader,device,optimizer,valid_loader,n_items,auc
         
     print("The best validation roc_auc_score from epoch %d: %.4f" % (highest_epoch + 1, highest_auc))
     model.load_state_dict(best_model)
-    return model,f1_score_history,auc_history
+    return model,f1_score_history,auc_history, acc_history
