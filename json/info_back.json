@@ -7,7 +7,7 @@
 		"s3id": "AKIAQVEDD6PUXL23XJO5",
 		"s3skey": "f+8RQm8lOwwkuWhlu6JtnQXVKLhRNOSvcZzF8l8c",
 		"s3region": "ap-northeast-2",
-		"input_file_name": "./data/my_algebra_picture3000_ordered_binary.csv",
+		"input_file_name": "./data/my_algebra_picture3000_ordered_binary_rename.csv",
 		"rf_cut": 0.2,
 		"lasso_p_value": 0.1
 	}
