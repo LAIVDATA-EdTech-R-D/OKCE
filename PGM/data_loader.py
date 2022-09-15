@@ -62,7 +62,7 @@ def pre_loader(data_path, target_KC):
 def kdd_loader(data_path, subset_list, target_KC):
 
     # subset_list 학습 순서 매기기(KC 순서대로)
-    ordering_json_path = './KC_Ordering.json'
+    ordering_json_path = '../json/KC_Ordering.json'
     # 기존 json 파일 읽어오기
     with open(ordering_json_path, 'r') as file:
         OrderingData = json.load(file)
@@ -80,28 +80,22 @@ def kdd_loader(data_path, subset_list, target_KC):
     cols.append(target_KC)
     students = list(data_pd['student'].unique())
     new_df = pd.DataFrame(index=range(0), columns = ['student', 'kc', 'acc'])
-    try:
-        for i in range(len(students)):
-            for j in range(len(cols)):
-                sample_df = pd.DataFrame({
-                    'student' : students[i],
-                    'kc' : cols[j],
-                    'acc' : data_pd[cols[j]][i]},
-                index = [0])
-                new_df = pd.concat([new_df,sample_df])
-    except:
-        print('i, j: ', i, j)
-        print("students[i] : ", students[i])
-        print("cols[i] : ", cols[i])
-        print("data_pd[cols[j]] : ", data_pd[cols[j]])
-        print("data_pd[cols[j]][i] : ", data_pd[cols[j]][i])
-        exit()
+    
+    index = []
+    skill = []
+    acc = []
+    for i in range(len(students)):
+        index.extend([students[i]]*len(cols))
+        skill.extend(cols)
+        acc.extend(data_pd.iloc[i:i+1,1:].values.reshape(-1).tolist())
+
+    new_df = pd.DataFrame(zip(index, skill, acc), columns = ['student', 'kc', 'acc'])
 
     new_df = new_df.reset_index(drop= True)
-    idx_students, students, students_id_to_idx, one_hot_vectors, n_items = loader(new_df)
+    idx_students, students, students_id_to_idx, one_hot_vectors, n_items, items = loader(new_df)
     batches, n_items = batch_loader(idx_students, students, students_id_to_idx, one_hot_vectors, n_items)
     #print(new_df)
-    return batches, n_items 
+    return batches, n_items, items
 
 
 def loader(new_df):
@@ -151,7 +145,7 @@ def loader(new_df):
     for i, unique_student in enumerate(idx_students):
         students_id_to_idx[unique_student] = i
     
-    return idx_students, students, students_id_to_idx, one_hot_vectors, n_items
+    return idx_students, students, students_id_to_idx, one_hot_vectors, n_items, items
     batch_loader(idx_students, students, students_id_to_idx, one_hot_vectors, n_items)
 
 
