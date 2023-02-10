@@ -1,1 +1,4 @@
 *.DS_Store
+info_back.json
+SSM_OUT/
+SSM_PGM/
