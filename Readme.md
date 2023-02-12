@@ -14,7 +14,7 @@ This is the official implementations of **OKCE: Optimal Knowledge Component Extr
 This code has been tested with Python 3.8, Pytorch 1.12, R 4.2.2, CUDA 11.2 and cuDNN 8.0 on Ubuntu 20.04.
 * Clone the repository
 ```terminal
-git clone ~.git
+git clone https://github.com/LAIVDATA-EdTech-R-D/OKCE.git
 ```
 * Setup dependencies
 ```terminal
