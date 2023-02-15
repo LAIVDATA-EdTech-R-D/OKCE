@@ -34,7 +34,7 @@ pick_ns = [3, 2, 2, 1, 1]
 def SelPartialKCs(json_path, data_path):
     sub_kcs = np.zeros(num_partial_kc)
     
-    #json_path = './info_back.json'
+    #json_path = '../json/info_back.json'
     # 기존 json 파일 읽어오기
     with open(json_path, 'r') as file:
         data = json.load(file)
@@ -47,12 +47,11 @@ def SelPartialKCs(json_path, data_path):
         json.dump(data, file, indent="\t", ensure_ascii=False)
 
     # R 관계 분석 실행
-    #robjects.r.source('./20220826_RF_LASSO.R', encoding='utf-8')
+    #robjects.r.source('./RF_LASSO.R', encoding='utf-8')
 
     # 결과 파일 가져와서 정제하기
     time.sleep(1)
-    subset_df = pd.read_csv('../SSM_OUT/ssm_relation.csv')
-    #subset_df = pd.read_csv('./OUT/picture_relation.csv')
+    subset_df = pd.read_csv('./OUT/picture_relation.csv')
     
     all_kcs = list(subset_df['before'].unique())
     
@@ -305,16 +304,16 @@ def GetRankedKCGraph(json_path, data_path,n_epochs):
                 before_kcs = copy.deepcopy(ranked_kc_rel)
                 #print("다음 턴에 들어갈 KC KC: ", kc_candidates)
                 #print()
-            txt_title = '../SSM_OUT/0906/PT_' + str(all_kcs[kc_idx]) + '.txt'
-            #txt_title = './OUT/picking_tb/0826_r10/picture' + str(kc_idx) + str(all_kcs[kc_idx]) + '_picking_tb_4321_rename.txt'
+            
+            txt_title = './OUT/picking_tb/0826_r10/picture' + str(kc_idx) + str(all_kcs[kc_idx]) + '_picking_tb_4321_rename.txt'
             with open(txt_title,'w',encoding='UTF-8') as f:
                 for code,name in KC_picking_tb.items():
                     f.write(f'{code} : {name}\n')
 
-        result_df.to_csv('../SSM_OUT/0906/FIR_ver3_(4).csv', index=False)
+        result_df.to_csv('../OUT/OKCE.csv', index=False)
     
     except:
-        result_df.to_csv('../SSM_OUT/0906/FIR_ver3_error(4).csv', index=False)
+        result_df.to_csv('../OUT/OKCE.csv', index=False)
         print("문제 : ", all_kcs[kc_idx])
         print("kc_idx : ", kc_idx)
         
