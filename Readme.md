@@ -44,13 +44,14 @@ Rscript ./PGM/data_preprocessing.R
 python merge_main.py --data_path=../data/algebra_ratio3000.csv --n_epochs=150
 ```
 
+<!--
 ### (4) Result
 * Optimal KC(Knowledge Concept) extracting  
     * [OUT/exp_name](./OUT)
 * Optimal KC(Knowledge Concept) extracting with feature selection
     * [OUT/exp_name](./OUT)
 
-<!--
+
 to do:
 train .py arg - exp_name
 git link
