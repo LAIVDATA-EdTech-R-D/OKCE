@@ -1,8 +1,8 @@
 # Optimal Knowledge Component Extracting Model for Knowledge-Concept Graph Completion in Education
 This is the official implementations of **OKCE: Optimal Knowledge Component Extracting Model for Knowledge-Concept Graph Completion in Education**(IEEE Access, 2023). For technical details, please refer to:  
 
-**Optimal Knowledge Component Extracting Model for Knowledge-Concept Graph Completion in Education** [[paper link]()]  
-[Hyunhee Choi](choihh@laivdata.com), [Hayun Lee](leehayun0406@gmial.com), [Minjeong Lee](minjeonglee@cau.ac.kr)  
+**Optimal Knowledge Component Extracting Model for Knowledge-Concept Graph Completion in Education** [[DOI](https://doi.org/10.1109/ACCESS.2023.3244614)]  
+Hyunhee Choi, Hayun Lee, Minjeong Lee  
 
 ![algorithm](./Images/OKCE.png)
 <!--* Performance
